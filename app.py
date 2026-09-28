@@ -1,97 +1,81 @@
 import streamlit as st
-from fuzzywuzzy import fuzz
+import requests
+from bs4 import BeautifulSoup
+import urllib.parse
 
-# إعدادات الواجهة وهوية النظام
+# ضبط إعدادات الصفحة
 st.set_page_config(
-    page_title="بَصِير | محرك التحقق وضبط الموثوقية الشرعية",
+    page_title="بَصِير | محرك التحقق الشرعي - فتاوى ابن باز",
     page_icon="🛡️",
     layout="centered"
 )
 
-# قاعدة بيانات مرجعية محققة وموثقة (متون السنة المعتمدة)
-HADITH_DB = [
-    {
-        "text": "إنما الأعمال بالنيات، وإنما لكل امرئ ما نوى، فمن كانت هجرته إلى دنيا يصيبها، أو إلى امرأة ينكحها، فهجرته إلى ما هاجر إليه.",
-        "keywords": ["الاعمال بالنيات", "لكل امرئ ما نوى", "فمن كانت هجرته"],
-        "narrator": "عمر بن الخطاب رضي الله عنه",
-        "source": "صحيح البخاري (حديث رقم 1) / صحيح مسلم (حديث رقم 1907)",
-        "grade": "صحيح (متفق عليه)"
-    },
-    {
-        "text": "بني الإسلام على خمس: شهادة أن لا إله إلا الله وأن محمداً رسول الله، وإقام الصلاة، وإيتاء الزكاة، والحج، وصوم رمضان.",
-        "keywords": ["بني الاسلام على خمس", "شهادة ان لا اله الا الله", "اقام الصلاة"],
-        "narrator": "عبد الله بن عمر رضي الله عنهما",
-        "source": "صحيح البخاري (حديث رقم 8) / صحيح مسلم (حديث رقم 16)",
-        "grade": "صحيح (متفق عليه)"
-    },
-    {
-        "text": "طلب العلم فريضة على كل مسلم.",
-        "keywords": ["طلب العلم فريضة على كل مسلم"],
-        "narrator": "أنس بن مالك رضي الله عنه",
-        "source": "سنن ابن ماجه (حديث رقم 224)",
-        "grade": "صحيح لغيره (حكم الألباني)"
-    },
-    {
-        "text": "المسلم من سلم المسلمون من لسانه ويده، والمهاجر من هجر ما نهى الله عنه.",
-        "keywords": ["المسلم من سلم المسلمون من لسانه ويده"],
-        "narrator": "عبد الله بن عمرو رضي الله عنهما",
-        "source": "صحيح البخاري (حديث رقم 10)",
-        "grade": "صحيح"
+# دالة البحث المباشر في الموقع الرسمي للإمام ابن باز
+def search_binbaz(query):
+    encoded_query = urllib.parse.quote(query)
+    search_url = f"https://binbaz.org.sa/search?q={encoded_query}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
-]
+    
+    try:
+        response = requests.get(search_url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            # استخراج النتائج من صفحة البحث
+            results = []
+            items = soup.find_all('div', class_='search-result-item') or soup.find_all('article')
+            
+            for item in items[:3]: # أخذ أول 3 نتائج دقيقة
+                title_tag = item.find('a')
+                snippet_tag = item.find('p')
+                
+                if title_tag:
+                    title = title_tag.get_text(strip=True)
+                    link = title_tag['href']
+                    if not link.startswith('http'):
+                        link = f"https://binbaz.org.sa{link}"
+                    snippet = snippet_tag.get_text(strip=True) if snippet_tag else "اضغط على الرابط لقراءة الفتوى كاملة من المصدر."
+                    results.append({"title": title, "link": link, "snippet": snippet})
+            return results
+    except Exception as e:
+        return []
+    return []
 
-# ترويسة النظام والشرح
-st.title("🛡️ محرك بَصِير (Baseer AI)")
-st.caption("محرك ذكاء اصطناعي للتحقق الشرعي، وضبط الموثوقية، ومكافحة الهلوسة الرقمية في متون السنة النبوية")
+# واجهة المستخدم
+st.title("🛡️ محرك بَصِير | فتاوى ابن باز")
+st.caption("محرك بحث وتحقق مقيد حصرياً بالموقع الرسمي للإمام ابن باز رحمه الله (مكافحة الهلوسة الرقمية)")
 
 st.markdown("""
-> أداة تخصصية للمسار الرابع: تدقيق الأحاديث وحظر التوليد الاحتمالي العشوائي، مع تفعيل خاصية بطاقة الموثوقية وخوارزمية الامتناع والإحالة الآلية.
+> يقوم هذا النظام بفحص استفسارك والتحقق منه **حصرياً من فتاوى الموقع الرسمي للشيخ عبدالعزيز بن باز رحمه الله**؛ لمنع التوليد العشوائي والامتناع عن الإجابة في حال عدم ثبوت النص في المرجع.
 """)
 
-# صندوق إدخال النص
-query = st.text_area("أدخل نص الحديث أو الاقتباس المراد التحقق من ثبوته وسنده:", height=110, placeholder="اكتب هنا، مثلاً: إنما الأعمال بالنيات...")
+query = st.text_input("أدخل المسألة، السؤال، أو الحديث المراد البحث عنه في فتاوى الشيخ:", placeholder="مثال: حكم صلاة الوتر، قراءة القرآن للحائض...")
 
-if st.button("فحص وتدقيق النص", type="primary"):
+if st.button("فحص وتدقيق من موقع ابن باز", type="primary"):
     if not query.strip():
-        st.warning("يرجى إدخال نص أولاً لإجراء الفحص والتدقيق.")
+        st.warning("يرجى كتابة نص أو سؤال للبحث.")
     else:
-        best_match = None
-        highest_score = 0
-
-        # فحص التطابق اللغوي والدلالي الصارم
-        for item in HADITH_DB:
-            score_full = fuzz.token_set_ratio(query, item["text"])
-            max_keyword_score = max([fuzz.partial_ratio(query, kw) for kw in item["keywords"]])
-            score = max(score_full, max_keyword_score)
+        with st.spinner("جاري الاتصال والتحقق من الموقع الرسمي للإمام ابن باز..."):
+            results = search_binbaz(query)
             
-            if score > highest_score:
-                highest_score = score
-                best_match = item
-
-        # الحالة 1: ثبوت النص وتجاوز عتبة الثقة (ظهور بطاقة الموثوقية)
-        if highest_score >= 70:
-            st.success("✅ نتيجة الفحص: نص محقق وموثق في المتون المعتمدة")
-            
-            with st.container(border=True):
-                st.subheader("📋 بطاقة الموثوقية الشرعية (Reliability Badge)")
-                st.markdown(f"**المتن المعتمد:**\n> {best_match['text']}")
+            if results:
+                st.success("✅ نتيجة الفحص: تم العثور على فتاوى مطابقة في الموقع الرسمي")
                 
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write(f"**الحكم والدرجة:** `{best_match['grade']}`")
-                    st.write(f"**الصحابي الراوي:** {best_match['narrator']}")
-                with col2:
-                    st.write(f"**التخريج والمصدر:** {best_match['source']}")
-                    st.write(f"**مؤشر الثقة المعرفية:** `{highest_score}%` (استرجاع إسنادي مقيد)")
-
-        # الحالة 2: غياب السند أو تدني الثقة (تفعيل الامتناع والإحالة الآلية - صفر هلوسة)
-        else:
-            st.error("⚠️ تنبيه: تعذر إثبات السند في قاعدة المعرفة المعتمدة")
-            with st.container(border=True):
-                st.subheader("⛔ تفعيل خوارزمية الامتناع الآلي (Zero-Hallucination Guard)")
-                st.markdown("""
-                - **حالة النص:** لم يُعثر على إسناد مطابق في أمهات كتب الحديث المعتمدة لدينا.
-                - **إجراء النظام:** امتنع المحرك آلياً عن التوليد أو التلفيق صيانةً لجناب السنة النبوية.
-                - **الإحالة:** تمت إحالة الاستفسار إلى الباحث والمختص الشرعي للتحقق والتخريج اليدوي.
-                """)
-                st.info("💡 معيار النجاح: التوقف والاعتراف بنقص المعرفة خيرٌ من توليد أحاديث ملفقة بروايات لا أصل لها.")
+                for idx, res in enumerate(results, 1):
+                    with st.container(border=True):
+                        st.subheader(f"📋 بطاقة الموثوقية الشرعية #{idx}")
+                        st.markdown(f"**عنوان الفتوى:** {res['title']}")
+                        st.write(f"**مقتطف من الجواب:** {res['snippet']}")
+                        st.markdown(f"🔗 **رابط الفتوى من المصدر المعتمد:** [اضغط هنا للقراءة في موقع ابن باز]({res['link']})")
+                        st.caption("المصدر: مؤسسة الشيخ عبدالعزيز بن باز الخيرية - الموقع الرسمي")
+            else:
+                st.error("⚠️ تنبيه: تعذر العثور على فتوى مطابقة في الموقع الرسمي")
+                with st.container(border=True):
+                    st.subheader("⛔ تفعيل خوارزمية الامتناع الآلي (Zero-Hallucination Guard)")
+                    st.markdown("""
+                    - **حالة البحث:** لم نجد نصاً مباشراً يطابق عبارة البحث في أرشيف فتاوى الشيخ ابن باز المتاح.
+                    - **إجراء النظام:** امتنع المحرك آلياً عن توليد أو اختلاق أي فتوى من عنده صيانةً للفتوى والأمانة العلمية.
+                    - **الإحالة:** يرجى صياغة البحث بكلمات أخرى أو الرجوع للمختصين واللجنة الدائمة للإفتاء.
+                    """)
+                    st.info("💡 مبدأ السلامة العلمية: التوقف عند عدم العثور على المرجع خيرٌ من الهلوسة وتلفيق الأحكام الشرعية.")
